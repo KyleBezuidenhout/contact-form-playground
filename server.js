@@ -480,10 +480,7 @@ const server = http.createServer(function (req, res) {
 
   res.writeHead(200, { 'Content-Type': 'text/html' });
   if (sub && V[sub]) { res.end(V[sub].html()); return; }
-  if (sub && !V[sub]) {
-    res.end(page('Unknown variant', head('404', 'No such variant', 'No form registered for subdomain "' + esc(sub) + '".') + '<p><a href="http://' + hostBase + ':' + PORT + '/">See all variants</a></p>'));
-    return;
-  }
+  // apex / www / any non-variant host → the catalog (the home an agent reads to pick a subdomain)
   res.end(indexPage(hostBase, PORT));
 });
 
