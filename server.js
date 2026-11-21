@@ -34,6 +34,8 @@ try {
 } catch (e) {}
 function record(entry) { LEDGER.push(entry); try { fs.appendFileSync(LEDGER_FILE, JSON.stringify(entry) + '\n'); } catch (e) {} }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'; }); }
+let GUIDE = '';
+try { GUIDE = fs.readFileSync(path.join(__dirname, 'AGENT-GUIDE.md'), 'utf8'); } catch (e) {}
 
 const MSG_KEYS = /(message|comment|enquiry|inquiry|details|body|question|describe|how.?can|msg)/i;
 const HP_KEYS = /(website2|url2|honeypot|_gotcha|^hp$|leaveblank|confirm_email)/i;
@@ -327,7 +329,9 @@ function indexPage(hostBase, port) {
     return '<h2 class="grp">' + g[1] + '</h2><ul class="idx">' + items + '</ul>';
   }).join('');
   return page('form-sim index', head('form-sim', 'Form fixtures', 'No-captcha form variants across subdomains. Each POSTs to /submit; the real outcome is recorded to a ground-truth ledger.') +
-    '<p><a class="pill" href="http://inbox.' + base + portPart + '/">inbox.' + base + portPart + ' — landing ledger →</a></p>' +
+    '<p style="display:flex;gap:8px;flex-wrap:wrap"><a class="pill" href="/guide">Agent guide</a>' +
+    '<a class="pill" href="/llms.txt">llms.txt</a><a class="pill" href="/_catalog">Catalog JSON</a>' +
+    '<a class="pill" href="http://inbox.' + base + portPart + '/">inbox — landing ledger →</a></p>' +
     sections +
     '<p class="muted" style="margin-top:20px">Subdomains of <code>' + base + '</code> route by Host header. ' +
     'For real subdomains, point <code>*.' + base + '</code> at this host (set APP_BASE) and keep the same keys. ' +
@@ -424,6 +428,44 @@ function sendConfirm(res, outcome, sub, fields, wantsJson, token) {
 }
 
 /* ---------- server ---------- */
+function extBase(req, host, hostBase) {
+  var scheme = (req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  var base = process.env.APP_BASE || hostBase;
+  var portPart = process.env.APP_BASE ? '' : (':' + PORT);
+  return { scheme: scheme, base: base, portPart: portPart };
+}
+function llmsTxt(e) {
+  var home = e.scheme + '://' + e.base + e.portPart;
+  return [
+    '# form-sim — contact-form submission test harness',
+    '',
+    'Purpose: point an automated contact-form submitter at these fixtures to measure two things —',
+    '(1) can it find + fill the form across different rendering, field/header names, hidden fields, and',
+    'message-field presence; and (2) did the submission actually LAND (ground truth), not just show a',
+    '"thanks" page. This is a test fixture, not a real website.',
+    '',
+    'Home / catalog (human):            ' + home + '/',
+    'Catalog (JSON, machine-readable):  ' + home + '/_catalog',
+    'Full guide:                        ' + home + '/guide   (raw markdown: ' + home + '/guide.md)',
+    'Landing ledger (ground truth):     ' + e.scheme + '://inbox.' + e.base + e.portPart + '/',
+    '',
+    'How to use:',
+    '1. Pick a variant subdomain from /_catalog (e.g. static, jslate, shadow, weird, no-message).',
+    '2. Submit its form. To correlate your submission with the ground truth, either embed a token',
+    '   "TK-xxxxxx" (3+ chars after the dash) in the message, OR read the id the server returns on every',
+    '   /submit via the "X-Sim-Id" response header and the JSON "id" field.',
+    '3. Verify: GET /_truth?t=<id>   (or /_truth?latest=1 right after a single submit).',
+    '   landed:true = really delivered. A success-looking page with landed:false = a FALSE POSITIVE.',
+    '   honeypot:true = you filled a hidden trap field. full_message:false = no/short message got through.',
+    '',
+    'Endpoints: POST /submit  ·  GET /_truth  ·  GET /_truth?t=TOKEN  ·  GET /_truth?latest=1  ·',
+    '           GET /_ledger.jsonl  ·  GET /_reset  ·  GET /_catalog  ·  GET /guide',
+    '',
+    'Default is land-first (no deceptive traps). Run the server with FP=1 to enable confirmation /',
+    'false-positive trap variants (fake-thanks, silent-200, honeypot-eaten, js-lies, redirect-generic, ...).'
+  ].join('\n');
+}
+
 const server = http.createServer(function (req, res) {
   var url = req.url.split('?')[0];
   var query = parseQuery(req.url);
@@ -442,6 +484,37 @@ const server = http.createServer(function (req, res) {
   }
   if (url === '/_ledger.jsonl') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end(LEDGER.map(function (e) { return JSON.stringify(e); }).join('\n')); return; }
   if (url === '/_reset') { LEDGER.length = 0; AUTO = 0; try { fs.writeFileSync(LEDGER_FILE, ''); } catch (e) {} res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ledger cleared'); return; }
+
+  /* agent docs: machine-readable catalog, llms.txt, and the human guide */
+  if (url === '/_catalog' || url === '/catalog.json') {
+    var e = extBase(req, host, hostBase);
+    var variants = Object.keys(V).map(function (k) { return { name: k, group: V[k].group, label: V[k].label, desc: V[k].desc, url: e.scheme + '://' + k + '.' + e.base + e.portPart + '/' }; });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      name: 'form-sim',
+      purpose: 'Multi-subdomain contact-form test harness with a ground-truth landing ledger. Fixture, not a real site.',
+      home: e.scheme + '://' + e.base + e.portPart + '/',
+      inbox: e.scheme + '://inbox.' + e.base + e.portPart + '/',
+      guide: e.scheme + '://' + e.base + e.portPart + '/guide',
+      llms_txt: e.scheme + '://' + e.base + e.portPart + '/llms.txt',
+      submit: { method: 'POST', path: '/submit', body: 'application/x-www-form-urlencoded or application/json' },
+      correlate: 'Every /submit returns an id in the X-Sim-Id header and JSON "id"; or embed TK-xxxx in the message; or GET /_truth?latest=1.',
+      truth_endpoints: ['/_truth', '/_truth?t=TOKEN', '/_truth?latest=1', '/_ledger.jsonl', '/_reset'],
+      ledger_fields: ['landed', 'full_message', 'honeypot', 'msg_len', 'token', 'variant', 'from'],
+      groups: { render: 'rendering / field-selection', message: 'message-gate: skip if no room for the full message' },
+      count: variants.length,
+      variants: variants
+    }, null, 2));
+    return;
+  }
+  if (url === '/llms.txt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(llmsTxt(extBase(req, host, hostBase))); return; }
+  if (url === '/guide.md') { res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }); res.end(GUIDE || '(guide unavailable)'); return; }
+  if (url === '/guide') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(page('Agent guide', head('guide', 'Agent guide', 'How to use this harness and why. Machine-readable: <a href="/_catalog">/_catalog</a> · agent brief: <a href="/llms.txt">/llms.txt</a> · raw: <a href="/guide.md">/guide.md</a>') +
+      '<pre style="white-space:pre-wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;font:13px/1.55 ui-monospace,monospace">' + esc(GUIDE || '(guide unavailable)') + '</pre>'));
+    return;
+  }
 
   /* submission */
   if (req.method === 'POST' && url === '/submit') {
