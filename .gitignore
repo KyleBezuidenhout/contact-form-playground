@@ -1,0 +1,4 @@
+node_modules/
+_ledger.jsonl
+*.log
+.DS_Store

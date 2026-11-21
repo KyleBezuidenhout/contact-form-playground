@@ -1,0 +1,13 @@
+{
+  "name": "contact-form-playground",
+  "version": "1.0.0",
+  "private": true,
+  "description": "form-sim — multi-subdomain contact-form test harness with a ground-truth landing ledger",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
