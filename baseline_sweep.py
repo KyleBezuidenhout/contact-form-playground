@@ -53,8 +53,12 @@ def truth_token(client, www: str, token: str):
     return False, None
 
 
-def score(variant: str, expect: str, send_ok: bool, landed: bool) -> str:
-    """SKIP expects no send at all; LAND/SOLVE expect the fixture truth to confirm delivery."""
+def score(variant: str, expect: str, send_ok: bool, landed: bool, fp: bool = False) -> str:
+    """Static mode: SKIP expects no send; LAND/SOLVE expect confirmed delivery.
+    Trap mode: PASS means the engine's own verdict MATCHED reality (so claiming
+    "sent" on a page that actually dropped = a false positive = FAIL)."""
+    if fp:
+        return "PASS" if send_ok == landed else "FAIL"
     if expect == "SKIP":
         return "PASS" if not send_ok else "FAIL"
     return "PASS" if landed else "FAIL"
@@ -70,7 +74,7 @@ def main() -> int:
     args = ap.parse_args()
 
     catalog = json.loads(wire.Client().get(args.base + "/_catalog").body.decode())
-    variants = [v for v in catalog["variants"] if v["group"] != "confirm" or args.fp]
+    variants = [v for v in catalog["variants"] if (v["group"] == "confirm") == args.fp]
     if args.only:
         want = {x.strip() for x in args.only.split(",")}
         variants = [v for v in variants if v["name"] in want]
@@ -81,7 +85,8 @@ def main() -> int:
     with wire.Client() as client:
         for v in variants:
             name, expect = v["name"], v["expect"]
-            page_url = args.base + ("/fp." if args.fp else "/") + name + ".html"
+            page_url = (f"https://fp-{name}.{args.base.replace('https://','').replace('http://','').rstrip('/')}/"
+                        if args.fp else f"{args.base}/{name}.html")
             token = "TK-" + uuid.uuid4().hex[:8]
             msg = f"{MESSAGE} {token}"
             try:
@@ -95,7 +100,7 @@ def main() -> int:
                 send_ok, detail = False, f"EXC {type(exc).__name__}: {exc}"
             time.sleep(0.4)
             landed, entry = truth_token(client, args.www, token)
-            verdict = score(name, expect, send_ok, landed)
+            verdict = score(name, expect, send_ok, landed, fp=args.fp)
             results.append({"variant": name, "group": v["group"], "expect": expect,
                             "engine_sent": send_ok, "fixture_landed": landed,
                             "verdict": verdict, "detail": detail})
@@ -103,6 +108,16 @@ def main() -> int:
                   f"truth_landed={landed}  {detail}")
 
     passed = sum(1 for r in results if r["verdict"] == "PASS")
+    if args.fp:
+        caps = [r for r in results if r["engine_sent"] and not r["fixture_landed"]]
+        print("\n== trap mode (false-positive detection) ==")
+        print(f"verdict matched reality: {passed}/{len(results)}")
+        print(f"FALSE POSITIVES (engine said sent, truth=not landed): {len(caps)} -> {[r['variant'] for r in caps]}")
+        missed = [r["variant"] for r in results if r["engine_sent"] and r["fixture_landed"] is False and r["verdict"] == "FAIL"]
+        out = Path(__file__).with_name("baseline_sweep_fp.json")
+        out.write_text(json.dumps(results, indent=2))
+        print("wrote", out)
+        return 0
     land = [r for r in results if r["expect"] == "LAND"]
     land_pass = sum(1 for r in land if r["verdict"] == "PASS")
     skip = [r for r in results if r["expect"] == "SKIP"]
@@ -117,9 +132,6 @@ def main() -> int:
     print("failures by group:", dict(fails))
     print("failures:", [r["variant"] for r in results if r["verdict"] == "FAIL"])
     out = Path(__file__).with_name("baseline_sweep_results.json")
-    out.write_text(json.dumps(results, indent=2))
-    print("wrote", out)
-    return 0
 
 
 if __name__ == "__main__":

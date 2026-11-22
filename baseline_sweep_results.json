@@ -1,7 +1,7 @@
 [
   {
-    "variant": "static",
-    "group": "render",
+    "variant": "ok-real",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
     "fixture_landed": true,
@@ -9,44 +9,8 @@
     "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "extended",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "shuffled",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "inline",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "toast",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "jslate",
-    "group": "render",
+    "variant": "fake-thanks",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
     "fixture_landed": false,
@@ -54,17 +18,8 @@
     "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "ajax",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "spa",
-    "group": "render",
+    "variant": "silent-200",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
     "fixture_landed": false,
@@ -72,8 +27,8 @@
     "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "multistep",
-    "group": "render",
+    "variant": "honeypot-eaten",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
     "fixture_landed": true,
@@ -81,8 +36,8 @@
     "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "shadow",
-    "group": "render",
+    "variant": "spam-eaten",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
     "fixture_landed": false,
@@ -90,53 +45,17 @@
     "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "iframe",
-    "group": "render",
+    "variant": "js-lies",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": false,
     "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "no matching form"
-  },
-  {
-    "variant": "weird",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": false,
-    "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "un-modelled JS form, no action"
-  },
-  {
-    "variant": "mailto",
-    "group": "render",
-    "expect": "SKIP",
-    "engine_sent": false,
-    "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "no matching form"
-  },
-  {
-    "variant": "oddnames",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 500"
   },
   {
-    "variant": "hiddenfields",
-    "group": "render",
-    "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "noform",
-    "group": "framework",
+    "variant": "redirect-generic",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
     "fixture_landed": false,
@@ -144,8 +63,8 @@
     "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "gravity",
-    "group": "framework",
+    "variant": "validation-masked",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
     "fixture_landed": true,
@@ -153,84 +72,21 @@
     "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "ajaxonly",
-    "group": "framework",
+    "variant": "delayed",
+    "group": "confirm",
     "expect": "LAND",
     "engine_sent": true,
-    "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "submit http 200; confirmation: 'message sent'"
+    "fixture_landed": true,
+    "verdict": "PASS",
+    "detail": "submit http 200; 2xx (no marker)"
   },
   {
-    "variant": "react-form",
-    "group": "framework",
+    "variant": "double-submit",
+    "group": "confirm",
     "expect": "LAND",
-    "engine_sent": false,
-    "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "no matching form"
-  },
-  {
-    "variant": "recaptcha-v2",
-    "group": "captcha",
-    "expect": "SOLVE",
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "recaptcha-v3",
-    "group": "captcha",
-    "expect": "SOLVE",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "hcaptcha",
-    "group": "captcha",
-    "expect": "SOLVE",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "turnstile",
-    "group": "captcha",
-    "expect": "SOLVE",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "no-message",
-    "group": "message",
-    "expect": "SKIP",
-    "engine_sent": true,
-    "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "short-only",
-    "group": "message",
-    "expect": "SKIP",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
-  },
-  {
-    "variant": "subject-only",
-    "group": "message",
-    "expect": "SKIP",
-    "engine_sent": true,
-    "fixture_landed": false,
-    "verdict": "FAIL",
     "detail": "submit http 200; 2xx (no marker)"
   }
 ]

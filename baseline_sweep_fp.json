@@ -1,0 +1,92 @@
+[
+  {
+    "variant": "ok-real",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": true,
+    "verdict": "PASS",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "fake-thanks",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": false,
+    "verdict": "FAIL",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "silent-200",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": false,
+    "verdict": "FAIL",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "honeypot-eaten",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": true,
+    "verdict": "PASS",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "spam-eaten",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": false,
+    "verdict": "FAIL",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "js-lies",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": false,
+    "fixture_landed": false,
+    "verdict": "PASS",
+    "detail": "submit http 500"
+  },
+  {
+    "variant": "redirect-generic",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": false,
+    "verdict": "FAIL",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "validation-masked",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": true,
+    "verdict": "PASS",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "delayed",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": true,
+    "verdict": "PASS",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "double-submit",
+    "group": "confirm",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": true,
+    "verdict": "PASS",
+    "detail": "submit http 200; 2xx (no marker)"
+  }
+]
