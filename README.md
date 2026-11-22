@@ -66,6 +66,18 @@ automatically). Change the port with `PORT=9000 node form-sim/server.js`.
 > These four are the real-world buckets that dominate our own failure data (~52% `no_form`-class, ~25–35% opaque WordPress ids).
 > `gravity`/`noform` **reject** an unmapped POST (no email mapped, or no ≥20-char message mapped) so the fix is proven, not assumed.
 
+### CAPTCHA (presence-gated — expects a solve token)
+| Subdomain | What it exercises |
+|---|---|
+| `recaptcha-v2` | visible checkbox; POST must carry `g-recaptcha-response` (≥20 chars) or rejected |
+| `recaptcha-v3` | invisible/score; token into hidden `g-recaptcha-response` |
+| `hcaptcha` | POST must carry `h-captcha-response` |
+| `turnstile` | POST must carry `cf-turnstile-response` |
+
+> The widget is faked (no real provider call). The gate is **presence only** — a non-empty response field of the
+> right name and plausible length. That measures whether your engine *has a solver wired and sends the token*;
+> it does **not** measure solve accuracy (that's the fake-verify/live upgrade). All four are `expect: SOLVE`.
+
 ### Message-gate (skip if there's no room for the message)
 | Subdomain | Problem |
 |---|---|

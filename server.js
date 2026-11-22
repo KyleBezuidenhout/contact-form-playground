@@ -70,6 +70,11 @@ function decide(sub, fields, token) {
     var hasCore = String(fields.email || '').indexOf('@') > 0 && Object.keys(fields).some(function (k) { return /msg|message|body|details|input_7/i.test(k) && String(fields[k]).length >= 20; });
     if (!hasCore) return { landed: false, reason: 'core fields not mapped (needs a label/placeholder classifier)', confirm: 'blank' };
   }
+  if (ev === 'recaptcha-v2' || ev === 'recaptcha-v3' || ev === 'hcaptcha' || ev === 'turnstile') {
+    var tok = String(fields['g-recaptcha-response'] || fields['h-captcha-response'] || fields['cf-turnstile-response'] || '');
+    // Not a real solve — just presence. An engine must have run a solver to produce a non-empty token.
+    if (tok.length < 20) return { landed: false, reason: 'captcha rejected — response field missing/too short', confirm: 'blank' };
+  }
   if (!FP) return { landed: true, reason: 'delivered', confirm: 'thanks' }; // land-first: everything submits & lands
   var hp = honeypotFilled(fields);
   var emailOk = fields.email && /.+@.+\..+/.test(String(fields.email));
@@ -303,8 +308,7 @@ reg('ajaxonly', 'framework', 'Platform AJAX endpoint only', 'The plain action re
     BASIC + '<button type="submit">Send</button></form>' +
     '<script>var f=document.getElementById("ef");f.action="/ajax-post/"+f.page_id.value;f.querySelector("button").innerHTML="Send (ajax)";</script>'); });
 
-reg('react-form', 'framework', 'React controlled inputs', 'Like client-rendered builders: the form only POSTs via React state. Setting .value directly is ignored without a native setter + input event.',
-  function () { return page('react-form', head('react-form', 'React controlled form', 'Inputs are controlled by React (no name attr). Fill them by dispatching an input event (or native value setter) so React state updates; on submit React serialises the state and lands. If you only poke DOM .value, state stays empty and it is rejected.') +
+reg('react-form', 'framework', 'React controlled inputs', 'Like client-rendered builders: the form only POSTs via React state. Setting .value directly is ignored without a native setter + input event.',  function () { return page('react-form', head('react-form', 'React controlled form', 'Inputs are controlled by React (no name attr). Fill them by dispatching an input event (or native value setter) so React state updates; on submit React serialises the state and lands. If you only poke DOM .value, state stays empty and it is rejected.') +
     '<form id="rf"><div id="mount"></div></form>' +
     '<script>' +
     'var state={name:"",email:"",message:""};' +
@@ -321,6 +325,37 @@ reg('react-form', 'framework', 'React controlled inputs', 'Like client-rendered 
     '.then(function(d){document.getElementById("mount").innerHTML=\'<div class="\'+(d.landed?"ok":"bad")+\'">\'+(d.landed?"Sent via controlled state.":"Rejected: React state was empty.")+\'</div>\';});' +
     '});' +
     '</script>'); });
+
+/* ===== group: captcha (presence-gated — a correct engine must supply the response field) ===== */
+// The widget is faked (no real provider). /submit rejects if the expected response field is missing/empty.
+const CAPTCHA =
+  '<div class="g-recaptcha" data-sitekey="6Lc-sim-0000000000000000000000000000"></div>' +
+  '<script src="https://www.google.com/recaptcha/api.js" async defer></script>';
+
+reg('recaptcha-v2', 'captcha', 'reCAPTCHA v2 (checkbox)', 'Visible checkbox widget. The POST must carry g-recaptcha-response (the solved token) or it is rejected.',
+  function () { return page('recaptcha v2', head('recaptcha-v2', 'reCAPTCHA v2 checkbox', 'A v2 checkbox is on the form. If your POST omits g-recaptcha-response, the server rejects it with "captcha". A correct engine solves and includes the token.') +
+    '<form method="POST" action="/submit">' + BASIC + CAPTCHA + '<button type="submit">Send</button></form>'); }, 'SOLVE');
+
+reg('recaptcha-v3', 'captcha', 'reCAPTCHA v3 (invisible)', 'Invisible/score-based. Token comes from grecaptcha.execute() into a hidden g-recaptcha-response field.',
+  function () { return page('recaptcha v3', head('recaptcha-v3', 'reCAPTCHA v3 (invisible)', 'No checkbox; a v3 token must be generated and submitted in g-recaptcha-response. Missing/empty → rejected.') +
+    '<form method="POST" action="/submit">' + BASIC + '<input type="hidden" name="g-recaptcha-response" value="">' +
+    '<script src="https://www.google.com/recaptcha/api.js?render=6Lc3-sim-00000000000000000000000000" async defer></script>' +
+    '<button type="submit">Send</button></form>'); }, 'SOLVE');
+
+reg('hcaptcha', 'captcha', 'hCaptcha', 'hCaptcha widget. The POST must carry h-captcha-response or it is rejected.',
+  function () { return page('hcaptcha', head('hcaptcha', 'hCaptcha', 'hCaptcha widget present. Your POST must include h-captcha-response (or g-recaptcha-response) — otherwise rejected.') +
+    '<form method="POST" action="/submit">' + BASIC +
+    '<div class="h-captcha" data-sitekey="10000000-ffff-ffff-ffff-000000000001"></div>' +
+    '<script src="https://js.hcaptcha.com/1/api.js" async defer></script>' +
+    '<button type="submit">Send</button></form>'); }, 'SOLVE');
+
+reg('turnstile', 'captcha', 'Cloudflare Turnstile', 'Turnstile widget. The POST must carry cf-turnstile-response (or a fallback) or it is rejected.',
+  function () { return page('turnstile', head('turnstile', 'Cloudflare Turnstile', 'Turnstile widget present. Your POST must include cf-turnstile-response or it is rejected.') +
+    '<form method="POST" action="/submit">' + BASIC +
+    '<div class="cf-turnstile" data-sitekey="1x00000000000000000000AA"></div>' +
+    '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>' +
+    '<button type="submit">Send</button></form>'); }, 'SOLVE');
+
 
 /* ===== group: confirm (confirmation handling + FALSE-POSITIVE detection) — only when FP=1 ===== */
 if (FP) {
@@ -382,7 +417,7 @@ reg('subject-only', 'message', 'Subject, no body', 'Has a subject line but no me
 
 /* ---------- optional: export each variant as a static .html file ---------- */
 // For hosts without wildcard DNS. Set EXPORT_DIR=./public (also regenerate on each request).
-let EXPORT_DIR = process.env.EXPORT_DIR || '';
+let EXPORT_DIR = process.env.EXPORT_DIR || path.join(__dirname, 'public');
 let exportPending = false;
 function exportVariants() {
   if (!EXPORT_DIR) return;
@@ -397,16 +432,17 @@ if (EXPORT_DIR) exportVariants();
 const GROUPS = [
   ['render', 'Render / field-selection'],
   ['framework', 'Framework / CMS shapes'],
+  ['captcha', 'CAPTCHA (presence-gated)'],
   ['confirm', 'Confirmation &amp; false-positive detection'],
   ['message', 'Message-gate (skip if no room for the message)']
 ];
 function indexPage(hostBase, port) {
   var base = process.env.APP_BASE || hostBase;
   var portPart = process.env.APP_BASE ? '' : (':' + port);
+  var links = process.env.APP_BASE ? function (k) { return 'https://' + k + '.' + base + '/'; } : function (k) { return '/' + k + '.html'; };
   var sections = GROUPS.map(function (g) {
     var items = Object.keys(V).filter(function (k) { return V[k].group === g[0]; }).map(function (k) {
-      var url = 'http://' + k + '.' + base + portPart + '/';
-      return '<li><a href="' + url + '">' + V[k].label + '</a> <span class="pill">' + V[k].expect + '</span><br><code>' + k + '.' + hostBase + ':' + port + '</code>' +
+      return '<li><a href="' + links(k) + '">' + V[k].label + '</a> <span class="pill">' + (V[k].expect || 'LAND') + '</span>' +
         '<div class="muted">' + V[k].desc + '</div></li>';
     }).join('');
     if (!items) return '';
@@ -415,10 +451,9 @@ function indexPage(hostBase, port) {
   return page('form-sim index', head('form-sim', 'Form fixtures', 'No-captcha form variants across subdomains. Each POSTs to /submit; the real outcome is recorded to a ground-truth ledger.') +
     '<p style="display:flex;gap:8px;flex-wrap:wrap"><a class="pill" href="/guide">Agent guide</a>' +
     '<a class="pill" href="/llms.txt">llms.txt</a><a class="pill" href="/_catalog">Catalog JSON</a>' +
-    '<a class="pill" href="http://inbox.' + base + portPart + '/">inbox — landing ledger →</a></p>' +
+    '<a class="pill" href="' + (process.env.APP_BASE ? 'https://inbox.' + base + '/' : '/inbox') + '">inbox — landing ledger →</a></p>' +
     sections +
     '<p class="muted" style="margin-top:20px">Subdomains of <code>' + base + '</code> route by Host header. ' +
-    'For real subdomains, point <code>*.' + base + '</code> at this host (set APP_BASE) and keep the same keys. ' +
     'Ground truth: <code>GET /_truth</code>, <code>GET /_truth?t=TOKEN</code>, <code>GET /_ledger.jsonl</code>, <code>GET /_reset</code>.</p>');
 }
 
@@ -576,7 +611,8 @@ const server = http.createServer(function (req, res) {
   /* agent docs: machine-readable catalog, llms.txt, and the human guide */
   if (url === '/_catalog' || url === '/catalog.json') {
     var e = extBase(req, host, hostBase);
-    var variants = Object.keys(V).map(function (k) { return { name: k, group: V[k].group, label: V[k].label, desc: V[k].desc, expect: V[k].expect, url: e.scheme + '://' + k + '.' + e.base + e.portPart + '/' }; });
+    var vurl = process.env.APP_BASE ? function (k) { return e.scheme + '://' + k + '.' + e.base + '/'; } : function (k) { return e.scheme + '://' + e.base + e.portPart + '/' + k + '.html'; };
+    var variants = Object.keys(V).map(function (k) { return { name: k, group: V[k].group, label: V[k].label, desc: V[k].desc, expect: V[k].expect, url: vurl(k) }; });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       name: 'form-sim',
@@ -590,7 +626,7 @@ const server = http.createServer(function (req, res) {
       truth_endpoints: ['/_truth', '/_truth?t=TOKEN', '/_truth?latest=1', '/_ledger.jsonl', '/_reset'],
       ledger_fields: ['landed', 'full_message', 'honeypot', 'msg_len', 'token', 'variant', 'from'],
       expect_legend: 'LAND = must be accepted with the full message; SKIP = engine should skip (no room for message / mailto); SOLVE = needs a captcha solve.',
-      groups: (function () { var g = { render: 'rendering / field-selection', framework: 'real-CMS shapes (the ones worth a fix)', message: 'message-gate: skip if no room for the full message' }; if (FP) g.confirm = 'confirmation + false-positive traps'; return g; })(),
+      groups: (function () { var g = { render: 'rendering / field-selection', framework: 'real-CMS shapes (the ones worth a fix)', captcha: 'presence-gated CAPTCHA fixtures', message: 'message-gate: skip if no room for the full message' }; if (FP) g.confirm = 'confirmation + false-positive traps'; return g; })(),
       count: variants.length,
       variants: variants
     }, null, 2));
@@ -639,6 +675,11 @@ const server = http.createServer(function (req, res) {
 
   /* inbox */
   if (sub === 'inbox' || url === '/inbox') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(inboxPage(hostBase, PORT)); return; }
+
+  // serve raw exported variant files (for no-wildcard hosts): /<name>.html
+  if (EXPORT_DIR && /^\/[a-z0-9-]+\.html$/.test(url)) {
+    try { var f = fs.readFileSync(path.join(EXPORT_DIR, url.slice(1)), 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(f); return; } catch (e) {}
+  }
 
   res.writeHead(200, { 'Content-Type': 'text/html' });
   if (sub && V[sub]) { res.end(V[sub].html()); return; }
