@@ -54,7 +54,9 @@ def truth_token(client, www: str, token: str):
 
 
 def score(variant: str, expect: str, send_ok: bool, landed: bool) -> str:
-    """PASS iff the fixture truth confirms the send truly landed."""
+    """SKIP expects no send at all; LAND/SOLVE expect the fixture truth to confirm delivery."""
+    if expect == "SKIP":
+        return "PASS" if not send_ok else "FAIL"
     return "PASS" if landed else "FAIL"
 
 
@@ -103,9 +105,13 @@ def main() -> int:
     passed = sum(1 for r in results if r["verdict"] == "PASS")
     land = [r for r in results if r["expect"] == "LAND"]
     land_pass = sum(1 for r in land if r["verdict"] == "PASS")
+    skip = [r for r in results if r["expect"] == "SKIP"]
+    skip_fp = sum(1 for r in skip if r["verdict"] == "FAIL")  # sent when it should have skipped
     print("\n== summary ==")
     print(f"overall: {passed}/{len(results)}")
     print(f"LAND coverage (the success rate that matters): {land_pass}/{len(land)}")
+    if skip:
+        print(f"message-gate: {len(skip) - skip_fp}/{len(skip)} correctly skipped")
     from collections import Counter
     fails = Counter(r["group"] for r in results if r["verdict"] == "FAIL")
     print("failures by group:", dict(fails))

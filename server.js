@@ -706,14 +706,14 @@ const server = http.createServer(function (req, res) {
     return;
   }
 
-  /* submission (and the ajax/react endpoints some fixtures POST to) */
-  if (req.method === 'POST' && (url === '/submit' || url === '/react-submit' || url === '/ajax-submit' || url.indexOf('/ajax-post/') === 0)) {
+  /* any POST is a submission — engines legitimately post back to the page URL
+     for forms with no action / loose fields, not just to /submit. */
+  if (req.method === 'POST') {
     parseBody(req, function (fields) {
       var token = extractToken(fields, query);
       var msg = messageOf(fields);
       var hp = honeypotFilled(fields);
-      var isJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0 || url === '/react-submit';
-      var outcome = decide(sub, fields, token, fpReq);
+      var isJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0 || url === '/react-submit';      var outcome = decide(sub, fields, token, fpReq);
       var variantRecorded = String(fields._sim_variant || sub || 'root');
       var full = msg.present && msg.len >= 20 && outcome.landed;
       var entry = {
