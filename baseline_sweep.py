@@ -132,6 +132,9 @@ def main() -> int:
     print("failures by group:", dict(fails))
     print("failures:", [r["variant"] for r in results if r["verdict"] == "FAIL"])
     out = Path(__file__).with_name("baseline_sweep_results.json")
+    out.write_text(json.dumps(results, indent=2))
+    print("wrote", out)
+    return 0
 
 
 if __name__ == "__main__":
