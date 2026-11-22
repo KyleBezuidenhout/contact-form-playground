@@ -55,8 +55,10 @@ function extractToken(fields, q) {
 function tokenLanded(tok) { return LEDGER.some(function (e) { return e.token === tok && e.landed; }); }
 
 /* Decide the REAL outcome per variant. confirm = what the visitor is shown. */
-function decide(sub, fields, token) {
+function decide(sub, fields, token, fpMode) {
   var ev = String(fields._sim_variant || sub || ''); // works via host OR static file://
+  if (String(fields._fp || '') === '1') fpMode = true; // static fp.* page marker
+  var fp = (fpMode === undefined) ? FP : fpMode;
   if (ev === 'ajaxonly') {
     // World-realistic: a plain POST to /ajax-submit is rejected; the AJAX contract lands.
     var ajaxOk = String(fields.action || '') === 'elementor_pro_forms_send_form' && String(fields.form_id || '') !== '';
@@ -75,10 +77,10 @@ function decide(sub, fields, token) {
     // Not a real solve — just presence. An engine must have run a solver to produce a non-empty token.
     if (tok.length < 20) return { landed: false, reason: 'captcha rejected — response field missing/too short', confirm: 'blank' };
   }
-  if (!FP) return { landed: true, reason: 'delivered', confirm: 'thanks' }; // land-first: everything submits & lands
+  if (!fp) return { landed: true, reason: 'delivered', confirm: 'thanks' }; // land-first: everything submits & lands
   var hp = honeypotFilled(fields);
   var emailOk = fields.email && /.+@.+\..+/.test(String(fields.email));
-  switch (sub) {
+  switch (ev) {
     case 'ok-real':          return { landed: true,  reason: 'delivered', confirm: 'thanks' };
     case 'fake-thanks':      return { landed: false, reason: 'silently dropped — confirmation is fake', confirm: 'thanks' };
     case 'silent-200':       return { landed: false, reason: 'empty 200, nothing stored', confirm: 'blank' };
@@ -357,8 +359,9 @@ reg('turnstile', 'captcha', 'Cloudflare Turnstile', 'Turnstile widget. The POST 
     '<button type="submit">Send</button></form>'); }, 'SOLVE');
 
 
-/* ===== group: confirm (confirmation handling + FALSE-POSITIVE detection) — only when FP=1 ===== */
-if (FP) {
+/* ===== group: confirm (confirmation handling + FALSE-POSITIVE detection) =====
+   Always registered so `fp.` hosts work; the plain profile just ignores them. */
+
 reg('ok-real', 'confirm', 'Real success (control)', 'Thanks shown AND message truly lands — the honest baseline.',
   function () { return page('ok-real', head('ok-real', 'Real success', 'Control: confirmation is honest and the message lands. Your detector should say LANDED.') + nativeForm('Send')); });
 
@@ -398,7 +401,7 @@ reg('delayed', 'confirm', 'Delayed delivery', 'Thanks shown immediately; actual 
 reg('double-submit', 'confirm', 'Double-submit', 'Replays with the same token are not re-delivered (thanks still shows).',
   function () { return page('double-submit', head('double-submit', 'Double-submit', 'First submit of a token lands; a replay of the SAME token shows thanks but is NOT re-delivered. Reuse one TK- token twice to test.') + nativeForm('Send')); });
 
-} /* end FP confirm group */
+/* end confirm group */
 
 /* ===== group: message (can the form even carry the full message?) ===== */
 reg('no-message', 'message', 'No message field', 'Name + email only — nowhere to put your message (the GSA v1 case).',
@@ -419,11 +422,19 @@ reg('subject-only', 'message', 'Subject, no body', 'Has a subject line but no me
 // For hosts without wildcard DNS. Set EXPORT_DIR=./public (also regenerate on each request).
 let EXPORT_DIR = process.env.EXPORT_DIR || path.join(__dirname, 'public');
 let exportPending = false;
+const FP_INJECT = '<script>(function(){' +
+  'document.querySelectorAll("form").forEach(function(f){var i=document.createElement("input");i.type="hidden";i.name="_fp";i.value="1";f.appendChild(i);});' +
+  'var of=window.fetch;window.fetch=function(u,o){try{if(typeof u==="string"&&u.charAt(0)==="/"&&/^\\/(submit|react-submit|ajax)/.test(u)){u+=(u.indexOf("?")<0?"?":"&")+"_fp=1";}}catch(e){}return of(u,o);};' +
+  '})();</script>';
 function exportVariants() {
   if (!EXPORT_DIR) return;
   try {
     fs.mkdirSync(EXPORT_DIR, { recursive: true });
-    Object.keys(V).forEach(function (k) { fs.writeFileSync(path.join(EXPORT_DIR, k + '.html'), V[k].html(), 'utf8'); });
+    Object.keys(V).forEach(function (k) {
+      var html = V[k].html();
+      fs.writeFileSync(path.join(EXPORT_DIR, k + '.html'), html, 'utf8');
+      if (V[k].group !== 'confirm' || true) fs.writeFileSync(path.join(EXPORT_DIR, 'fp.' + k + '.html'), html.replace('</body>', FP_INJECT + '</body>'), 'utf8');
+    });
   } catch (e) { console.log('export failed: ' + e.message); }
 }
 if (EXPORT_DIR) exportVariants();
@@ -438,11 +449,12 @@ const GROUPS = [
 ];
 function indexPage(hostBase, port) {
   var base = process.env.APP_BASE || hostBase;
-  var portPart = process.env.APP_BASE ? '' : (':' + port);
   var links = process.env.APP_BASE ? function (k) { return 'https://' + k + '.' + base + '/'; } : function (k) { return '/' + k + '.html'; };
+  var fpLinks = process.env.APP_BASE ? function (k) { return 'https://fp-' + k + '.' + base + '/'; } : function (k) { return '/fp.' + k + '.html'; };
   var sections = GROUPS.map(function (g) {
     var items = Object.keys(V).filter(function (k) { return V[k].group === g[0]; }).map(function (k) {
-      return '<li><a href="' + links(k) + '">' + V[k].label + '</a> <span class="pill">' + (V[k].expect || 'LAND') + '</span>' +
+      var extra = (V[k].group === 'confirm') ? '' : ' <a class="muted" href="' + fpLinks(k) + '">fp.</a>';
+      return '<li><a href="' + links(k) + '">' + V[k].label + '</a> <span class="pill">' + (V[k].expect || 'LAND') + '</span>' + extra +
         '<div class="muted">' + V[k].desc + '</div></li>';
     }).join('');
     if (!items) return '';
@@ -523,6 +535,29 @@ function subFromHost(host) {
   return null;
 }
 
+/* Match <variant>[.fp].<base>, and report whether the fp. label is present.
+   Works for a wildcard base (APP_BASE) or a real apex-derived base (e.g. testform.net).
+   So `static.fp.testform.net` = static variant in FALSE-POSITIVE (trap) mode. */
+function matchVariant(host) {
+  var h = (host || '').split(':')[0].toLowerCase();
+  var base = (process.env.APP_BASE || '').toLowerCase();
+  var labels;
+  if (base) {
+    if (h.slice(-('.' + base).length) !== '.' + base) return null;
+    labels = h.slice(0, h.length - base.length - 1).split('.'); // left of base
+  } else if (h.slice(-'.localhost'.length) === '.localhost') {
+    labels = h.slice(0, h.length - '.localhost'.length).split('.');
+  } else if (h.indexOf('.') >= 0 && h.slice(-'.up.railway.app'.length) !== '.up.railway.app') {
+    labels = h.split('.').slice(0, -2); // drop the registrable basename + tld
+  } else { return null; }
+  var fp = false;
+  if (labels.length && labels[labels.length - 1] === 'fp') { fp = true; labels = labels.slice(0, -1); } // <name>.fp.<base>
+  var name = labels[labels.length - 1] || '';
+  if (name.indexOf('fp-') === 0) { fp = true; name = name.slice(3); }                                  // fp-<name>.<base> (single-level wildcard)
+  if (!name || !V[name]) return null;
+  return { name: name, fp: fp };
+}
+
 /* ---------- thanks / confirmation rendering ---------- */
 function thanksHtml(sub, fields, token) {
   var rows = Object.keys(fields).map(function (k) { return '<tr><td class="muted">' + esc(k) + '</td><td>' + esc(fields[k]) + '</td></tr>'; }).join('');
@@ -583,8 +618,10 @@ function llmsTxt(e) {
     'Endpoints: POST /submit  ·  GET /_truth  ·  GET /_truth?t=TOKEN  ·  GET /_truth?latest=1  ·',
     '           GET /_ledger.jsonl  ·  GET /_reset  ·  GET /_catalog  ·  GET /guide',
     '',
-    'Default is land-first (no deceptive traps). Run the server with FP=1 to enable confirmation /',
-    'false-positive trap variants (fake-thanks, silent-200, honeypot-eaten, js-lies, redirect-generic, ...).'
+    'Default is land-first (no deceptive traps). Prefix any variant with "fp-" (e.g. fp-static.testform.net,',
+    'fp-fake-thanks.testform.net) to run it in FALSE-POSITIVE/trap mode: the page may look successful while the',
+    'truth is landed:false. Confirm-group variants (fake-thanks, silent-200, js-lies, honeypot-eaten, ...) only',
+    'behave as traps under an fp- host.'
   ].join('\n');
 }
 
@@ -594,6 +631,10 @@ const server = http.createServer(function (req, res) {
   var host = req.headers.host || ('localhost:' + PORT);
   var hostBase = (host.split(':')[0].split('.').slice(-1)[0] === 'localhost') ? 'localhost' : (host.split(':')[0].split('.').slice(1).join('.') || 'localhost');
   var sub = subFromHost(host);
+  var m = matchVariant(host);
+  var fpReq = !!(m && m.fp);          // via `<variant>.fp.<base>` host
+  var method = fpReq ? 'fp' : 'plain'; // fp. host = trap mode; else = plain (unless server-wide FP env)
+  if (fpReq) sub = m.name;             // make the variant render regardless of DNS base parsing
   if (EXPORT_DIR) exportVariants();
 
   /* ground-truth API (any host) */
@@ -612,7 +653,8 @@ const server = http.createServer(function (req, res) {
   if (url === '/_catalog' || url === '/catalog.json') {
     var e = extBase(req, host, hostBase);
     var vurl = process.env.APP_BASE ? function (k) { return e.scheme + '://' + k + '.' + e.base + '/'; } : function (k) { return e.scheme + '://' + e.base + e.portPart + '/' + k + '.html'; };
-    var variants = Object.keys(V).map(function (k) { return { name: k, group: V[k].group, label: V[k].label, desc: V[k].desc, expect: V[k].expect, url: vurl(k) }; });
+    var furl = process.env.APP_BASE ? function (k) { return e.scheme + '://fp-' + k + '.' + e.base + '/'; } : function (k) { return e.scheme + '://' + e.base + e.portPart + '/fp.' + k + '.html'; };
+    var variants = Object.keys(V).map(function (k) { return { name: k, group: V[k].group, label: V[k].label, desc: V[k].desc, expect: V[k].expect, url: vurl(k), fp_url: furl(k) }; });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       name: 'form-sim',
@@ -648,7 +690,7 @@ const server = http.createServer(function (req, res) {
       var msg = messageOf(fields);
       var hp = honeypotFilled(fields);
       var isJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0 || url === '/react-submit';
-      var outcome = decide(sub, fields, token);
+      var outcome = decide(sub, fields, token, fpReq);
       var full = msg.present && msg.len >= 20 && outcome.landed;
       var entry = {
         id: 'S' + (LEDGER.length + 1), token: token, ts: new Date().toISOString(), host: host, variant: sub || 'root',
@@ -677,7 +719,7 @@ const server = http.createServer(function (req, res) {
   if (sub === 'inbox' || url === '/inbox') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(inboxPage(hostBase, PORT)); return; }
 
   // serve raw exported variant files (for no-wildcard hosts): /<name>.html
-  if (EXPORT_DIR && /^\/[a-z0-9-]+\.html$/.test(url)) {
+  if (EXPORT_DIR && /^\/[a-z0-9.-]+\.html$/.test(url)) {
     try { var f = fs.readFileSync(path.join(EXPORT_DIR, url.slice(1)), 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(f); return; } catch (e) {}
   }
 

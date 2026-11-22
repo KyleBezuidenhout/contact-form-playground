@@ -134,18 +134,28 @@ delivering to our inbox — full truth; (3) arbitrary wild sites — **no truth 
 
 ---
 
-## False-positive mode (parked — enable later)
+## False-positive mode (`fp-<variant>` hosts — on by default, no second profile)
 
-When you're ready to test confirmation handling / false-positive detection:
+Every variant is reachable two ways on the same service:
+
+- `https://<variant>.testform.net` — **plain**: land-first, honest. `static`, `gravity`, `recaptcha-v2`, `fake-thanks`…
+- `https://fp-<variant>.testform.net` — **fp / trap mode**: the page may *look* successful while the ground truth is `landed:false`.
+
+Placement is decided by **presence only**, not solve accuracy:
 
 ```bash
-FP=1 node form-sim/server.js
+# trap mode via host prefix (no env var, no second Railway service)
+curl -X POST https://fp-fake-thanks.testform.net/submit --data "name=A&email=a@b.com&message=hi"
+# → page shows "Thanks", but GET /_truth?latest=1 shows landed:false  (a false positive to catch)
+
+# offline / self-host fallback: the env flag still works, or use the static fp.<name>.html files
+FP=1 node server.js
 ```
 
-This adds a **confirm** group where the page *looks* successful but often isn't: `ok-real`, `fake-thanks`,
-`silent-200`, `honeypot-eaten`, `spam-eaten`, `js-lies`, `redirect-generic`, `validation-masked`, `delayed`,
-`double-submit`. You submit with a token, read the page, emit your verdict, then `GET /_truth?t=TOKEN` and diff
-verdict vs reality — mismatch = a false positive your engine missed. Off by default.
+The **confirm** group (`ok-real`, `fake-thanks`, `silent-200`, `js-lies`, `redirect-generic`, `honeypot-eaten`,
+`spam-eaten`, `validation-masked`, `delayed`, `double-submit`) is now always registered; it only *acts like a trap*
+under an `fp-` host. Submit with a token, read the page, emit your verdict, then `GET /_truth?t=TOKEN` and diff —
+mismatch = a false positive your engine missed. Each confirm variant is mirrored at `fp.<name>.html` for static hosts.
 
 ## Notes / limits
 
