@@ -32,6 +32,14 @@ let AUTO = 0;
 try {
   fs.readFileSync(LEDGER_FILE, 'utf8').split('\n').forEach(function (l) { if (l.trim()) { try { LEDGER.push(JSON.parse(l)); } catch (e) {} } });
 } catch (e) {}
+// Reads re-parse the file so a restart (or another replica on a shared volume)
+// sees every row, not just this process's in-memory copy.
+function readLedger() {
+  try {
+    var txt = fs.readFileSync(LEDGER_FILE, 'utf8');
+    return txt.split('\n').filter(function (l) { return l.trim(); }).map(function (l) { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+  } catch (e) { return LEDGER.slice(); }
+}
 function record(entry) { LEDGER.push(entry); try { fs.appendFileSync(LEDGER_FILE, JSON.stringify(entry) + '\n'); } catch (e) {} }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'; }); }
 let GUIDE = '';
@@ -485,7 +493,8 @@ function indexPage(hostBase, port) {
 /* ---------- inbox (landing ledger) ---------- */
 function shortTs(s) { return String(s).replace('T', ' ').replace(/\.\d+Z$/, 'Z').slice(5); }
 function inboxPage(hostBase, port) {
-  var rows = LEDGER.slice().reverse().map(function (e) {
+  var L = readLedger();
+  var rows = L.slice().reverse().map(function (e) {
     var warn = e.landed && (!e.full_message || e.honeypot);
     var cls = e.landed ? (warn ? 'a' : 'g') : 'r';
     var state = !e.landed ? 'DROPPED' : (e.honeypot ? 'LANDED ⚠ filled hidden field' : (e.full_message ? 'LANDED' : 'LANDED ⚠ no/short message'));
@@ -497,18 +506,18 @@ function inboxPage(hostBase, port) {
       '<td>' + (e.msg_len ? (e.msg_len + ' ch') : '<span class="muted">—</span>') + '</td>' +
       '<td>' + state + '<div class="muted">' + esc(e.reason) + '</div></td></tr>';
   }).join('');
-  var landed = LEDGER.filter(function (e) { return e.landed; }).length;
-  var dropped = LEDGER.length - landed;
-  var thin = LEDGER.filter(function (e) { return e.landed && !e.full_message; }).length;
-  var honey = LEDGER.filter(function (e) { return e.honeypot; }).length;
+  var landed = L.filter(function (e) { return e.landed; }).length;
+  var dropped = L.length - landed;
+  var thin = L.filter(function (e) { return e.landed && !e.full_message; }).length;
+  var honey = L.filter(function (e) { return e.honeypot; }).length;
   return page('inbox · landing ledger',
     head('inbox', 'Landing ledger', 'Ground truth for our own fixtures: did it land, did we read the form right. Green = landed, full message read · amber = landed but no/short message OR a hidden field got filled · red = dropped.') +
-    '<div class="sum"><div><b>' + LEDGER.length + '</b><span class="muted">received</span></div>' +
+    '<div class="sum"><div><b>' + L.length + '</b><span class="muted">received</span></div>' +
     '<div><b style="color:#2a9d5a">' + landed + '</b><span class="muted">landed</span></div>' +
     (dropped ? '<div><b style="color:#d64545">' + dropped + '</b><span class="muted">dropped</span></div>' : '') +
     '<div><b style="color:#e0a106">' + thin + '</b><span class="muted">no/short msg</span></div>' +
     '<div><b style="color:#e0a106">' + honey + '</b><span class="muted">hidden field filled</span></div></div>' +
-    (LEDGER.length ? '<table class="lg"><tr><th></th><th>time</th><th>variant</th><th>token</th><th>email</th><th>msg</th><th>outcome</th></tr>' + rows + '</table>'
+    (L.length ? '<table class="lg"><tr><th></th><th>time</th><th>variant</th><th>token</th><th>email</th><th>msg</th><th>outcome</th></tr>' + rows + '</table>'
       : '<p class="muted">No submissions yet. Submit a form, then refresh.</p>') +
     '<p class="muted" style="margin-top:14px">Auto-refreshes. Clear with <code>GET /_reset</code>. JSON at <code>/_truth</code>.</p>',
     '<meta http-equiv="refresh" content="2">');
@@ -652,14 +661,15 @@ const server = http.createServer(function (req, res) {
 
   /* ground-truth API (any host) */
   if (url === '/_truth') {
+    var L = readLedger();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     var key = query.t || query.id;
-    if (query.latest !== undefined) { res.end(JSON.stringify(LEDGER[LEDGER.length - 1] || null)); return; }
-    if (key) { var hit = LEDGER.filter(function (e) { return e.token === key; }); res.end(JSON.stringify({ token: key, found: hit.length > 0, landed: hit.some(function (e) { return e.landed; }), entries: hit })); return; }
-    res.end(JSON.stringify(LEDGER));
+    if (query.latest !== undefined) { res.end(JSON.stringify(L[L.length - 1] || null)); return; }
+    if (key) { var hit = L.filter(function (e) { return e.token === key; }); res.end(JSON.stringify({ token: key, found: hit.length > 0, landed: hit.some(function (e) { return e.landed; }), entries: hit })); return; }
+    res.end(JSON.stringify(L));
     return;
   }
-  if (url === '/_ledger.jsonl') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end(LEDGER.map(function (e) { return JSON.stringify(e); }).join('\n')); return; }
+  if (url === '/_ledger.jsonl') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end(readLedger().map(function (e) { return JSON.stringify(e); }).join('\n')); return; }
   if (url === '/_reset') { LEDGER.length = 0; AUTO = 0; try { fs.writeFileSync(LEDGER_FILE, ''); } catch (e) {} res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ledger cleared'); return; }
 
   /* agent docs: machine-readable catalog, llms.txt, and the human guide */
