@@ -440,6 +440,13 @@ function exportVariants() {
 if (EXPORT_DIR) exportVariants();
 
 /* ---------- index ---------- */
+// confirm variants use bare nativeForm; embed their id so static/fp pages score right.
+Object.keys(V).forEach(function (k) {
+  if (V[k].group !== 'confirm') return;
+  var orig = V[k].html;
+  V[k].html = function () { return String(orig()).replace(/<form\b[^>]*>/gi, function (m) { return m + '<input type="hidden" name="_sim_variant" value="' + k + '">'; }); };
+});
+
 const GROUPS = [
   ['render', 'Render / field-selection'],
   ['framework', 'Framework / CMS shapes'],
