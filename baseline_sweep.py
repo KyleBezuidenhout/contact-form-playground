@@ -41,25 +41,20 @@ CAPTCHA_KIND = {"recaptcha-v2": "recaptcha_v2_v3", "recaptcha-v3": "recaptcha_v2
                 "hcaptcha": "hcaptcha", "turnstile": "cloudflare_turnstile"}
 
 
-def truth_latest(client, www: str):
+def truth_token(client, www: str, token: str):
+    """Ground truth for THIS send, correlated by the unique token (host-agnostic)."""
     try:
-        r = client.get(www + "/_truth?latest=1")
+        r = client.get(www + "/_truth?t=" + token)
         if r.status == 200:
-            return json.loads(r.body.decode("utf-8", "replace"))
+            d = json.loads(r.body.decode("utf-8", "replace"))
+            return d.get("landed"), (d.get("entries") or [None])[-1]
     except Exception:
         pass
-    return None
+    return False, None
 
 
-def score(variant: str, expect: str, send_ok: bool, truth: dict | None) -> str:
-    """PASS/FAIL from expectation vs the engine's own verdict AND the fixture truth."""
-    landed = bool(truth and truth.get("variant") == variant and truth.get("landed"))
-    if expect == "SKIP":
-        # every template here still lands if submitted (fixture is land-first),
-        # so the honest test is: did we recover full-message signals.
-        return "PASS" if landed else "FAIL"
-    if expect == "SOLVE":
-        return "PASS" if landed else "FAIL"
+def score(variant: str, expect: str, send_ok: bool, landed: bool) -> str:
+    """PASS iff the fixture truth confirms the send truly landed."""
     return "PASS" if landed else "FAIL"
 
 
@@ -97,13 +92,13 @@ def main() -> int:
             except Exception as exc:  # engine blew up on this shape
                 send_ok, detail = False, f"EXC {type(exc).__name__}: {exc}"
             time.sleep(0.4)
-            truth = truth_latest(client, args.www)
-            verdict = score(name, expect, send_ok, truth)
+            landed, entry = truth_token(client, args.www, token)
+            verdict = score(name, expect, send_ok, landed)
             results.append({"variant": name, "group": v["group"], "expect": expect,
-                            "engine_sent": send_ok, "fixture_landed": bool(truth and truth.get("landed")),
+                            "engine_sent": send_ok, "fixture_landed": landed,
                             "verdict": verdict, "detail": detail})
             print(f"  {verdict:4} {name:14} expect={expect:4} engine_sent={send_ok} "
-                  f"truth_landed={bool(truth and truth.get('landed'))}  {detail}")
+                  f"truth_landed={landed}  {detail}")
 
     passed = sum(1 for r in results if r["verdict"] == "PASS")
     land = [r for r in results if r["expect"] == "LAND"]

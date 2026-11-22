@@ -1,0 +1,20 @@
+[
+  {
+    "variant": "static",
+    "group": "render",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": true,
+    "verdict": "FAIL",
+    "detail": "submit http 200; 2xx (no marker)"
+  },
+  {
+    "variant": "gravity",
+    "group": "framework",
+    "expect": "LAND",
+    "engine_sent": true,
+    "fixture_landed": false,
+    "verdict": "FAIL",
+    "detail": "submit http 200; 2xx (no marker)"
+  }
+]

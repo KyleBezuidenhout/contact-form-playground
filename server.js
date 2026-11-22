@@ -69,8 +69,9 @@ function decide(sub, fields, token, fpMode) {
     return String(fields._react_ok || '') === '1' ? { landed: true, reason: 'delivered via controlled state', confirm: 'blank' } : { landed: false, reason: 'state empty — controlled inputs not driven', confirm: 'blank' };
   }
   if (ev === 'gravity' || ev === 'noform') {
-    var hasCore = String(fields.email || '').indexOf('@') > 0 && Object.keys(fields).some(function (k) { return /msg|message|body|details|input_7/i.test(k) && String(fields[k]).length >= 20; });
-    if (!hasCore) return { landed: false, reason: 'core fields not mapped (needs a label/placeholder classifier)', confirm: 'blank' };
+    var anyEmail = Object.keys(fields).some(function (k) { return /.+@.+\..+/.test(String(fields[k])); });
+    var anyMsg = Object.keys(fields).some(function (k) { return /msg|message|body|details|input_7|field_7/i.test(k) && String(fields[k]).length >= 20; });
+    if (!anyEmail || !anyMsg) return { landed: false, reason: 'core fields not mapped (needs a label/placeholder classifier)', confirm: 'blank' };
   }
   if (ev === 'recaptcha-v2' || ev === 'recaptcha-v3' || ev === 'hcaptcha' || ev === 'turnstile') {
     var tok = String(fields['g-recaptcha-response'] || fields['h-captcha-response'] || fields['cf-turnstile-response'] || '');
@@ -285,7 +286,7 @@ reg('noform', 'framework', 'Opaque fields, no <form>', 'Real GSA v1 case: the in
     '<label>Message<textarea id="nf_msg" name="message" placeholder="How can we help?"></textarea></label>' +
     '<div id="nf_send" role="button" tabindex="0" class="btn">Send</div></div>' +
     '<div id="nf_out" class="muted" style="margin-top:12px"></div>' +
-    '<script>function go(){var o={name:document.getElementById("nf_name").value,email:document.getElementById("nf_email").value,message:document.getElementById("nf_msg").value};' +
+    '<script>function go(){var o={_sim_variant:"noform",name:document.getElementById("nf_name").value,email:document.getElementById("nf_email").value,message:document.getElementById("nf_msg").value};' +
     'fetch("/submit",{method:"POST",headers:{"Content-Type":"application/json","X-Requested-With":"fetch"},body:JSON.stringify(o)})' +
     '.then(function(){document.getElementById("nf_out").innerHTML="<div class=\\"ok\\">Sent.</div>";});}' +
     'var b=document.getElementById("nf_send");b.addEventListener("click",go);b.addEventListener("keydown",function(e){if(e.key==="Enter")go();});</script>'); });
@@ -440,11 +441,16 @@ function exportVariants() {
 if (EXPORT_DIR) exportVariants();
 
 /* ---------- index ---------- */
-// confirm variants use bare nativeForm; embed their id so static/fp pages score right.
+// Every variant embeds its own id (hidden input in each form; JS-submit variants
+// set it in their payload). This makes landed-scoring work regardless of which
+// host/page URL the fixture is reached by (no reliance on Host header parsing).
 Object.keys(V).forEach(function (k) {
-  if (V[k].group !== 'confirm') return;
   var orig = V[k].html;
-  V[k].html = function () { return String(orig()).replace(/<form\b[^>]*>/gi, function (m) { return m + '<input type="hidden" name="_sim_variant" value="' + k + '">'; }); };
+  V[k].html = function () {
+    var html = String(orig());
+    if (html.indexOf('_sim_variant') >= 0) return html; // variant already sets it
+    return html.replace(/<form\b[^>]*>/gi, function (m) { return m + '<input type="hidden" name="_sim_variant" value="' + k + '">'; });
+  };
 });
 
 const GROUPS = [
@@ -698,9 +704,10 @@ const server = http.createServer(function (req, res) {
       var hp = honeypotFilled(fields);
       var isJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0 || url === '/react-submit';
       var outcome = decide(sub, fields, token, fpReq);
+      var variantRecorded = String(fields._sim_variant || sub || 'root');
       var full = msg.present && msg.len >= 20 && outcome.landed;
       var entry = {
-        id: 'S' + (LEDGER.length + 1), token: token, ts: new Date().toISOString(), host: host, variant: sub || 'root',
+        id: 'S' + (LEDGER.length + 1), token: token, ts: new Date().toISOString(), host: host, variant: variantRecorded,
         landed: outcome.landed, reason: outcome.reason, full_message: full, honeypot: hp,
         from: { name: fields.name || fields.full_name || '', email: fields.email || '' },
         msg_present: msg.present, msg_len: msg.len, msg_preview: msg.text.slice(0, 140), fields: fields
