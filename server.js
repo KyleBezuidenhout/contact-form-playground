@@ -56,6 +56,20 @@ function tokenLanded(tok) { return LEDGER.some(function (e) { return e.token ===
 
 /* Decide the REAL outcome per variant. confirm = what the visitor is shown. */
 function decide(sub, fields, token) {
+  var ev = String(fields._sim_variant || sub || ''); // works via host OR static file://
+  if (ev === 'ajaxonly') {
+    // World-realistic: a plain POST to /ajax-submit is rejected; the AJAX contract lands.
+    var ajaxOk = String(fields.action || '') === 'elementor_pro_forms_send_form' && String(fields.form_id || '') !== '';
+    return ajaxOk ? { landed: true, reason: 'delivered via ajax endpoint', confirm: 'blank' } : { landed: false, reason: 'rejected — plain POST without AJAX action', confirm: 'blank' };
+  }
+  if (ev === 'react-form') {
+    // Only lands if the filler drove React state (controlled inputs), a native `name` alone is not enough.
+    return String(fields._react_ok || '') === '1' ? { landed: true, reason: 'delivered via controlled state', confirm: 'blank' } : { landed: false, reason: 'state empty — controlled inputs not driven', confirm: 'blank' };
+  }
+  if (ev === 'gravity' || ev === 'noform') {
+    var hasCore = String(fields.email || '').indexOf('@') > 0 && Object.keys(fields).some(function (k) { return /msg|message|body|details|input_7/i.test(k) && String(fields[k]).length >= 20; });
+    if (!hasCore) return { landed: false, reason: 'core fields not mapped (needs a label/placeholder classifier)', confirm: 'blank' };
+  }
   if (!FP) return { landed: true, reason: 'delivered', confirm: 'thanks' }; // land-first: everything submits & lands
   var hp = honeypotFilled(fields);
   var emailOk = fields.email && /.+@.+\..+/.test(String(fields.email));
@@ -120,7 +134,9 @@ function nativeForm(btn) { return '<form method="POST" action="/submit">' + BASI
 
 /* ---------- variants ---------- */
 const V = {};
-function reg(key, group, label, desc, html) { V[key] = { group: group, label: label, desc: desc, html: html }; }
+// expect: the outcome a CORRECT engine should record. LAND = must be accepted with the full message.
+//   SKIP = engine should skip (nowhere for the message / mailto only). SOLVE = needs a captcha solve.
+function reg(key, group, label, desc, html, expect) { V[key] = { group: group, label: label, desc: desc, html: html, expect: expect || 'LAND' }; }
 
 /* ===== group: render (field-selection + render-wait) ===== */
 reg('static', 'render', 'Static HTML form', 'Plain server-rendered form, redirect to a thanks page on submit.',
@@ -239,7 +255,7 @@ reg('mailto', 'render', 'Mailto only (no form)', 'No form — JS-assembled mailt
   function () { return page('Mailto only', head('mailto', 'Mailto only', 'No form element. The address is assembled by JS — tests the no-form fallback path.') +
     '<p>Reach us at <span id="m" class="muted">(loading…)</span></p>' +
     '<script>var u="contact",d="sim.example.com";var a=document.createElement("a");a.href="mail"+"to:"+u+"@"+d;a.textContent=u+"@"+d;' +
-    'var s=document.getElementById("m");s.textContent="";s.appendChild(a);</script>'); });
+    'var s=document.getElementById("m");s.textContent="";s.appendChild(a);</script>'); }, 'SKIP');
 
 reg('oddnames', 'render', 'Framework-style field names', 'Bracketed / prefixed names like contact[email], wpcf7-message, form_fields[name].',
   function () { return page('oddnames', head('oddnames', 'Framework field names', 'Real WP/HubSpot-style names: contact[name], contact[email], wpcf7-message. Tests header/name mapping.') +
@@ -251,6 +267,60 @@ reg('hiddenfields', 'render', 'Hidden fields (token + honeypot)', 'Legit hidden 
   function () { return page('hiddenfields', head('hiddenfields', 'Hidden fields', 'Carries hidden _token and form_id (keep them) and a hidden honeypot confirm_email (leave empty).') +
     '<form method="POST" action="/submit"><input type="hidden" name="_token" value="csrf-abc123"><input type="hidden" name="form_id" value="7">' +
     '<input class="hp" name="confirm_email" tabindex="-1" autocomplete="off" aria-hidden="true">' + BASIC + '<button type="submit">Send</button></form>'); });
+
+/* ===== group: framework (real-CMS shapes that justify a fix) ===== */
+reg('noform', 'framework', 'Opaque fields, no <form>', 'Real GSA v1 case: the inputs sit in the HTML but there is NO <form> wrapper. JS assembles the POST. A naive parser finds "no form".',
+  function () { return page('noform', head('noform', 'No <form> wrapper', 'The name/email/message inputs exist in the DOM but are NOT inside a <form>. JavaScript collects them and POSTs. If your engine reports no_form here, it is wrong.') +
+    '<input type="hidden" name="_sim_variant" value="noform">' +
+    '<div class="formhost" id="h">' +
+    '<label>Name<input id="nf_name" name="name" type="text" placeholder="Jane Doe"></label>' +
+    '<label>Email<input id="nf_email" name="email" type="email" placeholder="jane@acme.com"></label>' +
+    '<label>Message<textarea id="nf_msg" name="message" placeholder="How can we help?"></textarea></label>' +
+    '<div id="nf_send" role="button" tabindex="0" class="btn">Send</div></div>' +
+    '<div id="nf_out" class="muted" style="margin-top:12px"></div>' +
+    '<script>function go(){var o={name:document.getElementById("nf_name").value,email:document.getElementById("nf_email").value,message:document.getElementById("nf_msg").value};' +
+    'fetch("/submit",{method:"POST",headers:{"Content-Type":"application/json","X-Requested-With":"fetch"},body:JSON.stringify(o)})' +
+    '.then(function(){document.getElementById("nf_out").innerHTML="<div class=\\"ok\\">Sent.</div>";});}' +
+    'var b=document.getElementById("nf_send");b.addEventListener("click",go);b.addEventListener("keydown",function(e){if(e.key==="Enter")go();});</script>'); });
+
+reg('gravity', 'framework', 'Opaque CMS numeric ids', 'Gravity/WPForms/Elementor style: labels carry the meaning, names are opaque (input_1.3 / field_2 / wpforms[fields][1]).',
+  function () { return page('gravity', head('gravity', 'Opaque CMS field ids', 'The visible label is the only clue — names are opaque framework ids. A label/placeholder classifier maps these; an id-matching parser does not.') +
+    '<form method="POST" action="/submit" class="gform">' +
+    '<input type="hidden" name="_sim_variant" value="gravity">' +
+    '<input type="hidden" name="gform_ajax" value="form_id=1&title=1">' +
+    '<div class="row"><label>First name<input name="input_1.3"></label>' +
+    '<label>Last name<input name="input_1.6"></label></div>' +
+    '<label>Email<input type="email" name="field_2"></label>' +
+    '<label>Phone<input type="tel" name="wpforms[fields][3]"></label>' +
+    '<label>Company<input name="field_5"></label>' +
+    '<label>Your message<textarea name="input_7"></textarea></label>' +
+    '<button type="submit">Send</button></form>'); });
+
+reg('ajaxonly', 'framework', 'Platform AJAX endpoint only', 'The plain action rejects it: only admin-ajax.php with the right action/token lands. Tests the platform AJAX re-route.',
+  function () { return page('ajaxonly', head('ajaxonly', 'AJAX-endpoint-only form', 'POSTing to the action shown (/ajax-submit) without action=elementor_pro_forms_send_form&form_id=1 is rejected with a validation error. Send the AJAX contract and it lands.') +
+    '<form id="ef" action="/ajax-submit" method="POST">' +
+    '<input type="hidden" name="_sim_variant" value="ajaxonly"><input type="hidden" name="page_id" value="7"><input type="hidden" name="form_id" value="1">' +
+    BASIC + '<button type="submit">Send</button></form>' +
+    '<script>var f=document.getElementById("ef");f.action="/ajax-post/"+f.page_id.value;f.querySelector("button").innerHTML="Send (ajax)";</script>'); });
+
+reg('react-form', 'framework', 'React controlled inputs', 'Like client-rendered builders: the form only POSTs via React state. Setting .value directly is ignored without a native setter + input event.',
+  function () { return page('react-form', head('react-form', 'React controlled form', 'Inputs are controlled by React (no name attr). Fill them by dispatching an input event (or native value setter) so React state updates; on submit React serialises the state and lands. If you only poke DOM .value, state stays empty and it is rejected.') +
+    '<form id="rf"><div id="mount"></div></form>' +
+    '<script>' +
+    'var state={name:"",email:"",message:""};' +
+    'function el(){var m=document.getElementById("mount");' +
+    'm.innerHTML=\'<label>Name<input data-k="name" value="\'+state.name+\'"></label>\'' +
+    '+\'<label>Email<input data-k="email" type="email" value="\'+state.email+\'"></label>\'' +
+    '+\'<label>Message<textarea data-k="message">\'+state.message+\'</textarea></label>\'' +
+    '+\'<button type="submit">Send</button>\';' +
+    'm.querySelectorAll("[data-k]").forEach(function(i){i.addEventListener("input",function(){state[i.getAttribute("data-k")]=i.value;});});}' +
+    'el();document.getElementById("rf").addEventListener("submit",function(e){e.preventDefault();' +
+    'var fd=new FormData();fd.append("name",state.name);fd.append("email",state.email);fd.append("message",state.message);' +
+    'fd.append("_sim_variant","react-form");fd.append("_react_ok",(state.name&&state.email&&state.message)?"1":"");' +
+    'fetch("/react-submit",{method:"POST",body:fd}).then(function(r){return r.json();})' +
+    '.then(function(d){document.getElementById("mount").innerHTML=\'<div class="\'+(d.landed?"ok":"bad")+\'">\'+(d.landed?"Sent via controlled state.":"Rejected: React state was empty.")+\'</div>\';});' +
+    '});' +
+    '</script>'); });
 
 /* ===== group: confirm (confirmation handling + FALSE-POSITIVE detection) — only when FP=1 ===== */
 if (FP) {
@@ -298,21 +368,35 @@ reg('double-submit', 'confirm', 'Double-submit', 'Replays with the same token ar
 /* ===== group: message (can the form even carry the full message?) ===== */
 reg('no-message', 'message', 'No message field', 'Name + email only — nowhere to put your message (the GSA v1 case).',
   function () { return page('no-message', head('no-message', 'No message field', 'There is no message/textarea at all. Your engine should SKIP this: a send here delivers no content.') +
-    '<form method="POST" action="/submit"><label>Name<input name="name"></label><label>Email<input name="email" type="email"></label><button type="submit">Send</button></form>'); });
+    '<form method="POST" action="/submit"><label>Name<input name="name"></label><label>Email<input name="email" type="email"></label><button type="submit">Send</button></form>'); }, 'SKIP');
 
 reg('short-only', 'message', 'Short message only', 'Single-line message input, maxlength 40 — full message gets truncated.',
   function () { return page('short-only', head('short-only', 'Short message only', 'The only message field is a single-line input capped at 40 chars. Your full pitch will be truncated — engine should skip or flag.') +
     '<form method="POST" action="/submit"><label>Name<input name="name"></label><label>Email<input name="email" type="email"></label>' +
-    '<label>Message<input name="message" maxlength="40" placeholder="max 40 chars"></label><button type="submit">Send</button></form>'); });
+    '<label>Message<input name="message" maxlength="40" placeholder="max 40 chars"></label><button type="submit">Send</button></form>'); }, 'SKIP');
 
 reg('subject-only', 'message', 'Subject, no body', 'Has a subject line but no message body field.',
   function () { return page('subject-only', head('subject-only', 'Subject, no body', 'There is a subject input but no message body. Nowhere for the actual message — engine should skip.') +
     '<form method="POST" action="/submit"><label>Name<input name="name"></label><label>Email<input name="email" type="email"></label>' +
-    '<label>Subject<input name="subject"></label><button type="submit">Send</button></form>'); });
+    '<label>Subject<input name="subject"></label><button type="submit">Send</button></form>'); }, 'SKIP');
+
+/* ---------- optional: export each variant as a static .html file ---------- */
+// For hosts without wildcard DNS. Set EXPORT_DIR=./public (also regenerate on each request).
+let EXPORT_DIR = process.env.EXPORT_DIR || '';
+let exportPending = false;
+function exportVariants() {
+  if (!EXPORT_DIR) return;
+  try {
+    fs.mkdirSync(EXPORT_DIR, { recursive: true });
+    Object.keys(V).forEach(function (k) { fs.writeFileSync(path.join(EXPORT_DIR, k + '.html'), V[k].html(), 'utf8'); });
+  } catch (e) { console.log('export failed: ' + e.message); }
+}
+if (EXPORT_DIR) exportVariants();
 
 /* ---------- index ---------- */
 const GROUPS = [
   ['render', 'Render / field-selection'],
+  ['framework', 'Framework / CMS shapes'],
   ['confirm', 'Confirmation &amp; false-positive detection'],
   ['message', 'Message-gate (skip if no room for the message)']
 ];
@@ -322,7 +406,7 @@ function indexPage(hostBase, port) {
   var sections = GROUPS.map(function (g) {
     var items = Object.keys(V).filter(function (k) { return V[k].group === g[0]; }).map(function (k) {
       var url = 'http://' + k + '.' + base + portPart + '/';
-      return '<li><a href="' + url + '">' + V[k].label + '</a><br><code>' + k + '.' + hostBase + ':' + port + '</code>' +
+      return '<li><a href="' + url + '">' + V[k].label + '</a> <span class="pill">' + V[k].expect + '</span><br><code>' + k + '.' + hostBase + ':' + port + '</code>' +
         '<div class="muted">' + V[k].desc + '</div></li>';
     }).join('');
     if (!items) return '';
@@ -451,6 +535,9 @@ function llmsTxt(e) {
     '',
     'How to use:',
     '1. Pick a variant subdomain from /_catalog (e.g. static, jslate, shadow, weird, no-message).',
+    '   Each variant carries an "expect" tag: LAND = must be accepted with the full message; SKIP = engine',
+    '   should skip (no room for the message / mailto only); SOLVE = needs a captcha solve. Score your engine',
+    '   as correct/LAND-variants — that is your real success rate, per engine.',
     '2. Submit its form. To correlate your submission with the ground truth, either embed a token',
     '   "TK-xxxxxx" (3+ chars after the dash) in the message, OR read the id the server returns on every',
     '   /submit via the "X-Sim-Id" response header and the JSON "id" field.',
@@ -472,6 +559,7 @@ const server = http.createServer(function (req, res) {
   var host = req.headers.host || ('localhost:' + PORT);
   var hostBase = (host.split(':')[0].split('.').slice(-1)[0] === 'localhost') ? 'localhost' : (host.split(':')[0].split('.').slice(1).join('.') || 'localhost');
   var sub = subFromHost(host);
+  if (EXPORT_DIR) exportVariants();
 
   /* ground-truth API (any host) */
   if (url === '/_truth') {
@@ -488,7 +576,7 @@ const server = http.createServer(function (req, res) {
   /* agent docs: machine-readable catalog, llms.txt, and the human guide */
   if (url === '/_catalog' || url === '/catalog.json') {
     var e = extBase(req, host, hostBase);
-    var variants = Object.keys(V).map(function (k) { return { name: k, group: V[k].group, label: V[k].label, desc: V[k].desc, url: e.scheme + '://' + k + '.' + e.base + e.portPart + '/' }; });
+    var variants = Object.keys(V).map(function (k) { return { name: k, group: V[k].group, label: V[k].label, desc: V[k].desc, expect: V[k].expect, url: e.scheme + '://' + k + '.' + e.base + e.portPart + '/' }; });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       name: 'form-sim',
@@ -501,7 +589,8 @@ const server = http.createServer(function (req, res) {
       correlate: 'Every /submit returns an id in the X-Sim-Id header and JSON "id"; or embed TK-xxxx in the message; or GET /_truth?latest=1.',
       truth_endpoints: ['/_truth', '/_truth?t=TOKEN', '/_truth?latest=1', '/_ledger.jsonl', '/_reset'],
       ledger_fields: ['landed', 'full_message', 'honeypot', 'msg_len', 'token', 'variant', 'from'],
-      groups: { render: 'rendering / field-selection', message: 'message-gate: skip if no room for the full message' },
+      expect_legend: 'LAND = must be accepted with the full message; SKIP = engine should skip (no room for message / mailto); SOLVE = needs a captcha solve.',
+      groups: (function () { var g = { render: 'rendering / field-selection', framework: 'real-CMS shapes (the ones worth a fix)', message: 'message-gate: skip if no room for the full message' }; if (FP) g.confirm = 'confirmation + false-positive traps'; return g; })(),
       count: variants.length,
       variants: variants
     }, null, 2));
@@ -516,12 +605,13 @@ const server = http.createServer(function (req, res) {
     return;
   }
 
-  /* submission */
-  if (req.method === 'POST' && url === '/submit') {
+  /* submission (and the ajax/react endpoints some fixtures POST to) */
+  if (req.method === 'POST' && (url === '/submit' || url === '/react-submit' || url === '/ajax-submit' || url.indexOf('/ajax-post/') === 0)) {
     parseBody(req, function (fields) {
       var token = extractToken(fields, query);
       var msg = messageOf(fields);
       var hp = honeypotFilled(fields);
+      var isJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0 || url === '/react-submit';
       var outcome = decide(sub, fields, token);
       var full = msg.present && msg.len >= 20 && outcome.landed;
       var entry = {
@@ -533,8 +623,7 @@ const server = http.createServer(function (req, res) {
       var write = function () {
         record(entry);
         console.log('[' + entry.ts + '] ' + (entry.landed ? 'LANDED ' : 'DROPPED') + '  variant=' + entry.variant + '  token=' + token + '  msg=' + msg.len + 'ch  (' + outcome.reason + ')');
-        var wantsJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0;
-        sendConfirm(res, outcome, sub, fields, wantsJson, token);
+        sendConfirm(res, outcome, sub, fields, isJson, token);
       };
       if (outcome.delayMs) { entry.ts = new Date(Date.now() + outcome.delayMs).toISOString(); setTimeout(write, outcome.delayMs); }
       else { write(); }

@@ -55,6 +55,17 @@ automatically). Change the port with `PORT=9000 node form-sim/server.js`.
 | `weird` | contenteditable "fields", inputs outside `<form>`, div button |
 | `mailto` | no form; JS-assembled address (no-form fallback) |
 
+### Framework / CMS shapes (the ones that justify a fix — hit hardest in real cold lists)
+| Subdomain | What it exercises |
+|---|---|
+| `noform` | fields present but **no `<form>` wrapper** — JS assembles the POST. A parser that reports "no form" is wrong. |
+| `gravity` | opaque CMS ids (`input_1.3`, `field_2`, `wpforms[fields][3]`) — only the label/placeholder maps the fields |
+| `ajaxonly` | the plain action **rejects** it; only the platform AJAX contract (`action=…&form_id=…`) lands |
+| `react-form` | controlled React inputs (no `name`); the POST only carries data if you drove React state (native setter + `input` event) |
+
+> These four are the real-world buckets that dominate our own failure data (~52% `no_form`-class, ~25–35% opaque WordPress ids).
+> `gravity`/`noform` **reject** an unmapped POST (no email mapped, or no ≥20-char message mapped) so the fix is proven, not assumed.
+
 ### Message-gate (skip if there's no room for the message)
 | Subdomain | Problem |
 |---|---|
@@ -129,5 +140,11 @@ verdict vs reality — mismatch = a false positive your engine missed. Off by de
 - No captchas, no WAF — intentionally. This isolates render + field-selection (+ FP detection under `FP=1`).
 - No file uploads (multipart not parsed). urlencoded + JSON bodies only.
 - `_ledger.jsonl` persists across restarts; delete it or `GET /_reset` to start clean.
+- **`expect` tag** — every variant declares what a correct engine should do (`LAND` / `SKIP` / `SOLVE`), surfaced in
+  `/_catalog` and the index. **`LAND` = accepted with the full message landed.** Compute your real success rate as
+  `correct ÷ LAND-variants`, per engine — that's the number that tells you which fix is worth building.
+- **`EXPORT_DIR`** — set `EXPORT_DIR=./public` to write every variant to `public/<name>.html` on boot and each
+  request. Use it on a host with **no wildcard DNS**: serve `/<name>` → `public/<name>.html`. Each framework
+  fixture carries a hidden `_sim_variant`, so `landed` scoring works over the static/`file://` path too.
 - Real subdomains later: point `*.yourdomain` at the host, keep the same keys, run behind nginx (host-routing
   already keys off the left-most `Host` label).
