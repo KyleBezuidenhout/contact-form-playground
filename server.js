@@ -589,16 +589,23 @@ function thanksHtml(sub, fields, token) {
     '<table class="lg" style="margin-top:14px">' + rows + '</table>' +
     '<p style="margin-top:14px"><a href="/">&larr; back</a></p>');
 }
+/* Confirmation the visitor is shown (thanks text / redirect / blank / 500).
+   When a JSON client (xhr/fetch) is detected, thanks/blank become JSON so an
+   HTTP-only engine that never executes the page JS can still read success. */
 function sendConfirm(res, outcome, sub, fields, wantsJson, token) {
   var H = { 'X-Sim-Id': token }; // every response carries the correlatable id
   if (outcome.confirm === 'redirect') { H.Location = '/'; res.writeHead(302, H); res.end(); return; }
-  if (outcome.confirm === 'blank') { H['Content-Type'] = 'text/plain'; res.writeHead(200, H); res.end(''); return; }
+  if (outcome.confirm === 'blank') {
+    if (wantsJson) { H['Content-Type'] = 'application/json'; res.writeHead(outcome.landed ? 200 : 422, H); res.end(JSON.stringify({ ok: outcome.landed, id: token, message: outcome.landed ? 'sent' : 'rejected', reason: outcome.reason })); return; }
+    H['Content-Type'] = 'text/plain'; res.writeHead(outcome.landed ? 200 : 422, H); res.end(outcome.landed ? '' : 'rejected'); return;
+  }
   if (outcome.confirm === '500') {
     H['Content-Type'] = wantsJson ? 'application/json' : 'text/html';
     if (wantsJson) { res.writeHead(500, H); res.end(JSON.stringify({ ok: false, id: token, error: 'server error' })); }
     else { res.writeHead(500, H); res.end(page('Error', head('error', '500', 'Server error.') + '<div class="bad">500 — something went wrong.</div>')); }
     return;
   }
+  if (!outcome.landed) { H['Content-Type'] = wantsJson ? 'application/json' : 'text/plain'; res.writeHead(422, H); res.end(wantsJson ? JSON.stringify({ ok: false, id: token, message: 'rejected', reason: outcome.reason }) : 'came back with a validation error. please fill required fields.'); return; }
   if (wantsJson) { H['Content-Type'] = 'application/json'; res.writeHead(200, H); res.end(JSON.stringify({ ok: true, id: token, variant: sub, received: fields })); return; }
   H['Content-Type'] = 'text/html'; res.writeHead(200, H); res.end(thanksHtml(sub, fields, token));
 }
@@ -706,14 +713,21 @@ const server = http.createServer(function (req, res) {
     return;
   }
 
-  /* any POST is a submission — engines legitimately post back to the page URL
-     for forms with no action / loose fields, not just to /submit. */
-  if (req.method === 'POST') {
+  /* any write method is a submission — engines legitimately post back to the page
+     URL for forms with no action / loose fields, or GET (query-string) a no-action form. */
+  if (req.method === 'POST' || req.method === 'GET') {
     parseBody(req, function (fields) {
+      if (req.method === 'GET') { for (var k in query) fields[k] = query[k]; }
+      // only treat a GET as a submission when it actually carries field data
+      if (req.method === 'GET' && !query.__data) {
+        var hasField = Object.keys(fields).some(function (k) { return /name|email|message|msg|comment|phone|contact|_sim_variant|_fp/.test(k); });
+        if (!hasField) { routeGet(); return; }
+      }
       var token = extractToken(fields, query);
       var msg = messageOf(fields);
       var hp = honeypotFilled(fields);
-      var isJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0 || url === '/react-submit';      var outcome = decide(sub, fields, token, fpReq);
+      var isJson = (req.headers['x-requested-with'] || '') !== '' || (req.headers.accept || '').indexOf('application/json') >= 0 || url === '/react-submit';
+      var outcome = decide(sub, fields, token, fpReq);
       var variantRecorded = String(fields._sim_variant || sub || 'root');
       var full = msg.present && msg.len >= 20 && outcome.landed;
       var entry = {
@@ -733,6 +747,7 @@ const server = http.createServer(function (req, res) {
     return;
   }
 
+  function routeGet() {
   if (url === '/iframe-inner') {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(page('iframe inner', '<form method="POST" action="/submit" style="margin:0">' + BASIC + '<button type="submit">Send from iframe</button></form>'));
@@ -751,6 +766,7 @@ const server = http.createServer(function (req, res) {
   if (sub && V[sub]) { res.end(V[sub].html()); return; }
   // apex / www / any non-variant host → the catalog (the home an agent reads to pick a subdomain)
   res.end(indexPage(hostBase, PORT));
+  }
 });
 
 server.listen(PORT, function () {
