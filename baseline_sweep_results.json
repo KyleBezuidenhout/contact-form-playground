@@ -120,10 +120,10 @@
     "variant": "oddnames",
     "group": "render",
     "expect": "LAND",
-    "engine_sent": true,
-    "fixture_landed": true,
-    "verdict": "PASS",
-    "detail": "submit http 200; confirmation: 'thanks'"
+    "engine_sent": false,
+    "fixture_landed": false,
+    "verdict": "FAIL",
+    "detail": "fetch http 502"
   },
   {
     "variant": "hiddenfields",
