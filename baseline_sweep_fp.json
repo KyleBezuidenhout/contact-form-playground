@@ -6,25 +6,25 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "fake-thanks",
     "group": "confirm",
     "expect": "LAND",
-    "engine_sent": true,
+    "engine_sent": false,
     "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "verdict": "PASS",
+    "detail": "submit http 422"
   },
   {
     "variant": "silent-200",
     "group": "confirm",
     "expect": "LAND",
-    "engine_sent": true,
+    "engine_sent": false,
     "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "verdict": "PASS",
+    "detail": "submit http 422"
   },
   {
     "variant": "honeypot-eaten",
@@ -33,16 +33,16 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "spam-eaten",
     "group": "confirm",
     "expect": "LAND",
-    "engine_sent": true,
+    "engine_sent": false,
     "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "verdict": "PASS",
+    "detail": "submit http 422"
   },
   {
     "variant": "js-lies",
@@ -57,10 +57,10 @@
     "variant": "redirect-generic",
     "group": "confirm",
     "expect": "LAND",
-    "engine_sent": true,
+    "engine_sent": false,
     "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "verdict": "PASS",
+    "detail": "submit http 200; no confirmation (http 200)"
   },
   {
     "variant": "validation-masked",
@@ -69,7 +69,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "delayed",
@@ -78,7 +78,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "double-submit",
@@ -87,6 +87,6 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   }
 ]

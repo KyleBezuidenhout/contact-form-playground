@@ -6,7 +6,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "extended",
@@ -15,7 +15,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "shuffled",
@@ -24,7 +24,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "inline",
@@ -33,7 +33,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "toast",
@@ -42,7 +42,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "jslate",
@@ -51,7 +51,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "ajax",
@@ -60,7 +60,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "spa",
@@ -69,7 +69,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "multistep",
@@ -78,7 +78,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "shadow",
@@ -87,7 +87,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "iframe",
@@ -123,7 +123,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "hiddenfields",
@@ -132,16 +132,16 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "noform",
     "group": "framework",
     "expect": "LAND",
     "engine_sent": true,
-    "fixture_landed": false,
-    "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "fixture_landed": true,
+    "verdict": "PASS",
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "gravity",
@@ -150,7 +150,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "ajaxonly",
@@ -159,7 +159,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; json ok"
   },
   {
     "variant": "react-form",
@@ -177,7 +177,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "recaptcha-v3",
@@ -186,7 +186,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "hcaptcha",
@@ -195,7 +195,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "turnstile",
@@ -204,7 +204,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "PASS",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "no-message",
@@ -213,7 +213,7 @@
     "engine_sent": true,
     "fixture_landed": false,
     "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "short-only",
@@ -222,7 +222,7 @@
     "engine_sent": true,
     "fixture_landed": true,
     "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   },
   {
     "variant": "subject-only",
@@ -231,6 +231,6 @@
     "engine_sent": true,
     "fixture_landed": false,
     "verdict": "FAIL",
-    "detail": "submit http 200; 2xx (no marker)"
+    "detail": "submit http 200; confirmation: 'thanks'"
   }
 ]

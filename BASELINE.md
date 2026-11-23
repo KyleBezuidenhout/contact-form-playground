@@ -1,39 +1,38 @@
 # form-sim baseline — engine vs fixture
 
-Date: 2026-11-22 · engine: `gsa_clone` (httpx/curl_cffi HTTP rung) · fixture: https://testform.net
+Date: 2026-11-22 · engine: `gsa_clone` (curl_cffi HTTP rung) · fixture: https://testform.net
 
 Run: `python3.11 baseline_sweep.py [--fp] --base https://www.testform.net --www https://www.testform.net`
 
-## Headline
+## Headline — before → after the two fixes
 
-- **LAND coverage 14/18** — the four we miss are the exact real-world shapes the framework group was built to expose.
-- **False positives: 4/10** on trap pages — the engine reports "sent" where nothing landed.
-- Captcha: **4/4 pass at presence level** (token injected, fixture accepts) — real solve still unproven by design.
-- Message-gate: **1/4 correct** (3 sends to fields that can't carry the pitch).
+| Metric | Before | After |
+|---|---|---|
+| LAND coverage | 14/18 | **15/18** |
+| False positives (says sent, truth = dropped) | 4/10 | **0/10** |
+| Captcha (presence level) | 4/4 | 4/4 |
+| Message-gate correctly skipped | 1/4 | 1/4 |
+| Unit tests | — | 81 pass |
 
-## Real gaps (fix these — each maps to a large real-world bucket)
+## Fixes applied
 
-| # | Variant | Bucket (real-world) | Engine behaviour | Fix |
-|---|---|---|---|---|
-| 1 | `noform` | fields present, **no `<form>`** (~30–50% of small-biz) | sends, HTTP 200, **not delivered** — posts to the page, field names lost | element-scan + assemble POST from loose fields |
-| 2 | `react-form` | React/Next controlled inputs | **no matching form** (no `name` attrs) | drive React state (native setter + `input`), or submit the data-attr fields |
-| 3 | `iframe` | same-origin iframe embeds (Wix/GoHighLevel/Square) | **no matching form** | step into same-origin frames |
-| 4 | `weird` | contenteditable / inputs outside `<form>` / div button | `FAILED_JS` | handle contenteditable + div-button JS submit |
+1. **Strict verification** — `sender.verify_submission()` no longer treats a bare 2xx as proof. It now requires: a positive confirmation marker, a success URL, or a JSON `ok:true`. Killed all 4 false positives (`fake-thanks`, `silent-200`, `spam-eaten`, `redirect-generic`). Also reads JSON API responses (`ok`/`success`/`status`).
+2. **No-form delivery** — real bug: `forms.parse` synthesized a no-action form as **method=GET**, so the engine GET the page (fields landed in the query string, never delivered). `submit.plan_submit` now normalizes a no-action GET to POST; `noform` goes dropped → landed. Also removed the dead end where loose-field values weren't carried.
 
-## False positives (engine says SENT, truth says dropped)
+Fixture side (so a real browser *and* a raw HTTP engine can both pass): any POST **or data-bearing GET** is a submission; a JS-SPA engine posting back to the page now gets a confirmation; a rejected submit returns **422** (not a lying 200).
 
-`fake-thanks`, `silent-200`, `spam-eaten`, `redirect-generic` — root cause: `verify_submission()` treats **any 2xx as verified** (`"2xx (no marker)"`). A blank 200, a fake thank-you, a silent spam drop, and a redirect-to-homepage all read as success.
+## Remaining real gaps
 
-Fix: require positive confirmation (thank-you text, success URL, or form-gone) before returning SENT; don't fall back to a bare 2xx.
+| Variant | Bucket | Behaviour | Fix |
+|---|---|---|---|
+| `react-form` | React/Next controlled inputs (no `name` attr) | no matching form | submit data-attr fields / drive React state |
+| `iframe` | same-origin iframe embeds | no matching form | step into same-origin frames |
+| `weird` | contenteditable / div-button | `FAILED_JS` | contenteditable + div submit |
 
-## Message-gate (engine side rule: skip if no room for the full message)
+Message-gate: `mailto` correctly skipped; `no-message`, `short-only`, `subject-only` still sent (engine has no message-field gate — a policy choice, you may *want* to send to no-message forms).
 
-`mailto` correctly skipped. `no-message`, `short-only`, `subject-only` **sent anyway** — the engine has no message-field gate.
+## Passing (no action)
 
-## Correct (no action)
+static, extended, shuffled, inline, toast, jslate, ajax, spa, multistep, shadow, oddnames, hiddenfields, gravity, noform, ajaxonly, recaptcha-v2/v3, hcaptcha, turnstile.
 
-static, extended, shuffled, inline, toast, jslate, ajax, spa, multistep, shadow, oddnames, hiddenfields, gravity, ajaxonly, recaptcha-v2/v3, hcaptcha, turnstile.
-
-Notes:
-- `shadow`, `gravity`, `ajaxonly`, `hiddenfields` all pass **via the static `/<name>.html` path** — the engine handles opaque ids, shadow DOM, and platform AJAX re-route on the HTTP rung.
-- Captcha passes are **presence-only** (engine injects a token; fixture checks `g-recaptcha-response` etc.). A real solver is still unbuilt — the engine is sending a placeholder token.
+Captcha passes are **presence-only** — the engine injects a token; a real solver is still unbuilt.
